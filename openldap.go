@@ -1,7 +1,7 @@
 /*
- * Openldap (2.4.30) binding in GO 
- * 
- * 
+ * Openldap (2.4.30) binding in GO
+ *
+ *
  *  link to ldap or ldap_r (for thread-safe binding)
  *
  *
@@ -17,10 +17,10 @@
  * distribute, sublicense, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be
  * included in all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
@@ -28,7 +28,7 @@
  * CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
  * TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- * 
+ *
  */
 
 package openldap
@@ -55,10 +55,10 @@ import (
 )
 
 /* Intialize() open an LDAP connexion ; supported url formats :
- * 
+ *
  *   ldap://host:389/
  *   ldaps://secure-host:636/
- * 
+ *
  * return values :
  *  - on success : LDAP object, nil
  *  - on error : nil and error with error description.
@@ -80,13 +80,13 @@ func Initialize(url string) (*Ldap, error) {
 	return &Ldap{ldap}, nil
 }
 
-/* 
+/*
  * Bind() is used for LDAP authentifications
- * 
+ *
  * if who is empty this is an anonymous bind
  * else this is an authentificated bind
- * 
- * return value : 
+ *
+ * return value :
  *  - nil on succes,
  *  - error with error description on error.
  *
@@ -118,10 +118,22 @@ func (self *Ldap) Bind(who, cred string) error {
 	return errors.New(fmt.Sprintf("LDAP::Bind() error (%d) : %s", rv, ErrorToString(rv)))
 }
 
-/* 
+func (self *Ldap) StartTLS() error {
+	var ctrls **C.LDAPControl = nil
+	var ctrls2 **C.LDAPControl = nil
+	rv := C.ldap_start_tls_s(self.conn, ctrls, ctrls2)
+
+	if rv == LDAP_OPT_SUCCESS {
+		return nil
+	}
+	self.conn = nil
+	return errors.New(fmt.Sprintf("LDAP::StartTLS() error (%d) : %s", int(rv), ErrorToString(int(rv))))
+}
+
+/*
  * close LDAP connexion
- * 
- * return value : 
+ *
+ * return value :
  *  - nil on succes,
  *  - error with error description on error.
  *
@@ -140,9 +152,9 @@ func (self *Ldap) Close() error {
 	return errors.New(fmt.Sprintf("LDAP::Close() error (%d) : %s", int(rv), ErrorToString(int(rv))))
 
 }
-/* 
+/*
  * Unbind() close LDAP connexion
- * 
+ *
  * an alias to Ldap::Close()
  *
  */
@@ -219,9 +231,9 @@ func (self *LdapAttribute) String() string{
 // avoiding displaying binary data.
 //
 func (self *LdapAttribute) ToText() string{
-	
+
 	var list []string
-	
+
 	for _, a := range self.Values() {
 		if (!_isPrint(a)) {
 			list = append(list, fmt.Sprintf("binary-data[%d]", len(a)))
@@ -240,7 +252,7 @@ func (self *LdapAttribute) Name() string{
 	return self.name
 }
 
-// Values() returns array values for self LdapAttribute 
+// Values() returns array values for self LdapAttribute
 //
 func (self *LdapAttribute) Values() []string{
 	return self.values
@@ -251,12 +263,12 @@ func (self *LdapAttribute) Values() []string{
 // @private method
 func _isPrint(str string) bool{
 	for _, c := range str{
-		
+
 		if !strconv.IsPrint(rune(c)) {
 			return false
 		}
 	}
-	
+
 	return true
 }
 
@@ -287,24 +299,24 @@ func (self *LdapEntry) String() string {
 
 // GetValuesByName() get a list of values for self LdapEntry, using "name" attribute
 func (self *LdapEntry) GetValuesByName(attrib string) []string{
-	
+
 	for _, a := range self.values{
 		if a.Name() == attrib {
 			return a.values
 		}
 	}
-	
+
 	return []string{}
 }
 // GetOneValueByName() ; a quick way to get a single attribute value
 func (self *LdapEntry) GetOneValueByName(attrib string) (string, error){
-	
+
 	for _, a := range self.values{
 		if a.Name() == attrib {
 			return a.values[0], nil
 		}
 	}
-	
+
 	return "", errors.New(fmt.Sprintf("LdapEntry::GetOneValueByName() error : attribute %s not found", attrib))
 }
 
@@ -312,7 +324,7 @@ func (self *LdapEntry) GetOneValueByName(attrib string) (string, error){
 func (self *LdapEntry) ToText() string{
 
 	txt := fmt.Sprintf("dn: %s\n", self.dn)
-	
+
 	for _, a := range self.values{
 		txt = txt + fmt.Sprintf("%s\n", a.ToText())
 	}
@@ -389,7 +401,7 @@ func (self *Ldap) SearchAll(base string, scope int, filter string, attributes []
 	sr.filter = filter
 	sr.attributes = attributes
 
-	// Search(base string, scope int, filter string, attributes []string) (*LDAPMessage, error)	
+	// Search(base string, scope int, filter string, attributes []string) (*LDAPMessage, error)
 	result, err := self.Search(base, scope, filter, attributes)
 
 	if err != nil {
@@ -404,7 +416,7 @@ func (self *Ldap) SearchAll(base string, scope int, filter string, attributes []
 
 	for e != nil {
 		_e := new(LdapEntry)
-		
+
 		_e.dn = e.GetDn()
 
 		attr, _ := e.FirstAttribute()
@@ -421,6 +433,6 @@ func (self *Ldap) SearchAll(base string, scope int, filter string, attributes []
 
 		e = e.NextEntry()
 	}
-	
+
 	return sr, nil
 }

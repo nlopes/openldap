@@ -12,10 +12,10 @@
  * distribute, sublicense, and/or sell copies of the Software, and to
  * permit persons to whom the Software is furnished to do so, subject to
  * the following conditions:
- * 
+ *
  * The above copyright notice and this permission notice shall be
  * included in all copies or substantial portions of the Software.
- * 
+ *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
  * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
@@ -28,6 +28,7 @@
 package openldap
 
 /*
+#include <stdlib.h>
 #include <ldap.h>
 
 static inline char* to_charptr(const void* s) { return (char*)s; }
@@ -44,12 +45,62 @@ import (
 	"unsafe"
 )
 
+func SetGlobalOption(opt int, val interface{}) error {
+	var rv int = -1
+	switch val.(type) {
+	case int:
+		x := val.(int)
+		rv = int(C.ldap_set_option(nil, C.int(opt), unsafe.Pointer(&x)))
+	case string:
+		x := C.CString(val.(string))
+		defer C.free(unsafe.Pointer(x))
+		rv = int(C.ldap_set_option(nil, C.int(opt), unsafe.Pointer(&x)))
+	default:
+		return nil
+	}
+	if rv == LDAP_OPT_SUCCESS {
+		return nil
+	}
+	return errors.New(fmt.Sprintf("LDAP::SetGlobalOption() error (%d) : %s", int(rv), ErrorToString(int(rv))))
+}
+
+func GetGlobalOption(opt int) (val interface{}, err error) {
+	var rv int
+	switch opt {
+	case LDAP_OPT_X_TLS_CACERTFILE:
+		val_c := C.CString("")
+		defer C.free(unsafe.Pointer(val_c))
+		rv = int(C.ldap_get_option(nil, C.int(opt), unsafe.Pointer(&val_c)))
+		if rv == LDAP_OPT_SUCCESS {
+			return C.GoString((*C.char)(val_c)), nil
+		}
+	case LDAP_OPT_PROTOCOL_VERSION, LDAP_OPT_X_TLS_REQUIRE_CERT:
+		var val_ int
+		rv = int(C.ldap_get_option(nil, C.int(opt), unsafe.Pointer(&val_)))
+		if rv == LDAP_OPT_SUCCESS {
+			return val_, nil
+		}
+	}
+
+	return 0, errors.New(fmt.Sprintf("LDAP::GetGlobalOption() error (%d) : %s", rv,
+		ErrorToString(int(rv))))
+}
+
 // FIXME : support all kind of option (int, int*, ...)
-func (self *Ldap) SetOption(opt int, val int) error {
-
+func (self *Ldap) SetOption(opt int, val interface{}) error {
 	// API: ldap_set_option (LDAP *ld,int option, LDAP_CONST void *invalue));
-	rv := C.ldap_set_option(self.conn, C.int(opt), unsafe.Pointer(&val))
-
+	var rv int
+	switch val.(type) {
+	case int:
+		x := val.(int)
+		rv = int(C.ldap_set_option(nil, C.int(opt), unsafe.Pointer(&x)))
+	case string:
+		x := C.CString(val.(string))
+		defer C.free(unsafe.Pointer(x))
+		rv = int(C.ldap_set_option(nil, C.int(opt), unsafe.Pointer(x)))
+	default:
+		return nil
+	}
 	if rv == LDAP_OPT_SUCCESS {
 		return nil
 	}
@@ -58,16 +109,27 @@ func (self *Ldap) SetOption(opt int, val int) error {
 }
 
 // FIXME : support all kind of option (int, int*, ...) should take care of all return type for ldap_get_option
-func (self *Ldap) GetOption(opt int) (val int, err error) {
-
+func (self *Ldap) GetOption(opt int) (val interface{}, err error) {
 	// API: int ldap_get_option (LDAP *ld,int option, LDAP_CONST void *invalue));
-	rv := C.ldap_get_option(self.conn, C.int(opt), unsafe.Pointer(&val))
-
-	if rv == LDAP_OPT_SUCCESS {
-		return val, nil
+	var rv int
+	switch opt {
+	case LDAP_OPT_X_TLS_CACERTFILE:
+		val_c := C.CString("")
+		defer C.free(unsafe.Pointer(val_c))
+		rv = int(C.ldap_get_option(self.conn, C.int(opt), unsafe.Pointer(&val_c)))
+		if rv == LDAP_OPT_SUCCESS {
+			return C.GoString((*C.char)(val_c)), nil
+		}
+	case LDAP_OPT_PROTOCOL_VERSION, LDAP_OPT_X_TLS_REQUIRE_CERT, LDAP_OPT_ERROR_NUMBER:
+		var val_ int
+		rv = int(C.ldap_get_option(self.conn, C.int(opt), unsafe.Pointer(&val_)))
+		if rv == LDAP_OPT_SUCCESS {
+			return val_, nil
+		}
 	}
 
-	return 0, errors.New(fmt.Sprintf("LDAP::GetOption() error (%d) : %s", rv, ErrorToString(int(rv))))
+	return 0, errors.New(fmt.Sprintf("LDAP::GetOption() error (%d) : %s", rv,
+		ErrorToString(int(rv))))
 }
 
 /*
@@ -114,5 +176,5 @@ func ErrorToString(err int) string {
 
 func (self *Ldap) Errno() int {
 	opt, _ := self.GetOption(LDAP_OPT_ERROR_NUMBER)
-	return opt
+	return opt.(int)
 }
